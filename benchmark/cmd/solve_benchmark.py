@@ -10,6 +10,7 @@ import pathlib
 import sys
 import time
 import warnings
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -54,6 +55,12 @@ def setup_parser(subparser):
         help="number of processes to use to produce the results",
         default=os.cpu_count(),
         type=int,
+    )
+    run.add_argument(
+        "-s",
+        "--shuffle",
+        help="shuffle the list of concretizations to be done",
+        action="store_true"
     )
     run.add_argument("specfile", help="text file with one spec per line, can be one of the predefined benchmarks")
 
@@ -134,28 +141,35 @@ def run(args):
                 item = (args, specs, idx, cf, i)
                 input_list.append(item)
 
+    if args.shuffle:
+        random.shuffle(input_list)
+
     start = time.time()
     pkg_stats = []
-    for idx, record in enumerate(
-        spack.util.parallel.imap_unordered(
-            process_single_item,
-            input_list,
-            processes=2,
-            debug=tty.is_debug(),
-            maxtaskperchild=1,
-        )
-    ):
-        duration = record[-2]
-        pkg_stats.append(record)
-        percentage = (idx + 1) / len(input_list) * 100
-        tty.msg(f"{duration:6.1f}s [{percentage:3.0f}%] {record[0]}")
-        sys.stdout.flush()
-    # for idx, input in enumerate(input_list):
-    #     record = process_single_item(input)
-    #     duration = record[-2]
-    #     pkg_stats.append(record)
-    #     percentage = (idx + 1) / len(input_list) * 100
-    #     tty.msg(f"{duration:6.1f}s [{percentage:3.0f}%] {record[0]}")
+
+    if args.nprocess > 1:
+        for idx, record in enumerate(
+            spack.util.parallel.imap_unordered(
+                process_single_item,
+                input_list,
+                processes=args.nprocess,
+                debug=tty.is_debug(),
+                maxtaskperchild=1,
+            )
+        ):
+            duration = record[-2]
+            pkg_stats.append(record)
+            percentage = (idx + 1) / len(input_list) * 100
+            tty.msg(f"{duration:6.1f}s [{percentage:3.0f}%] {record[0]}")
+            sys.stdout.flush()
+    else:
+        for idx, input in enumerate(input_list):
+            record = process_single_item(input)
+            duration = record[-2]
+            pkg_stats.append(record)
+            percentage = (idx + 1) / len(input_list) * 100
+            tty.msg(f"{duration:6.1f}s [{percentage:3.0f}%] {record[0]}")
+    
     finish = time.time()
     tty.msg(f"Total elapsed time: {finish - start:.2f} seconds")
     
