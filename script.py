@@ -65,13 +65,14 @@ for ax, level, title in zip(axes, cols, titles):
     negvals  = current.to_numpy().T - df.unstack(level="source").loc[:, (level, "min", 0):(level, "min", 1)].to_numpy().T
     posvals  = df.unstack(level="source").loc[:, (level, "max", 0):(level, "max", 1)].to_numpy().T - current.to_numpy().T
 
+    yerr = np.stack((negvals, posvals), axis=1)
     current.plot(
         ax=ax,
         kind="bar",
         width=.9,
         title=title,
         grid=True,
-        yerr=[negvals, posvals],
+        yerr=yerr,
         capsize=20,
         error_kw={"capthick":4, "elinewidth": 2},
         alpha=0.7
