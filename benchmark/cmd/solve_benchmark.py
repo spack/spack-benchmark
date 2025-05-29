@@ -65,23 +65,18 @@ def setup_parser(subparser):
     run.add_argument("specfile", help="text file with one spec per line, can be one of the predefined benchmarks")
 
     plot = sp.add_parser("plot", help="plot results recorded in a CSV file")
-    plot_type = plot.add_mutually_exclusive_group()
-    plot_type.add_argument(
-        "--cdf",
-        action="store_true",
-        help="CDF plot (number of packages vs. execution time)",
+    plot.add_argument(
+        "--reference-csv",
+        type=str,
+        required=True,
+        help="Path to the reference CSV file.",
     )
-    plot_type.add_argument(
-        "--scatter",
-        action="store_true",
-        help="scatter plot (execution time vs. possible dependencies)",
+    plot.add_argument(
+        "--candidate-csv",
+        type=str,
+        required=True,
+        help="Path to the candidate CSV file.",
     )
-    plot_type.add_argument(
-        "--histogram",
-        action="store_true",
-        help="histogram plot (execution time vs. number of packages)",
-    )
-    plot.add_argument("csvfile", help="CSV file with timing data")
     plot.add_argument("-o", "--output", help="output image file", required=True)
 
 
@@ -180,17 +175,10 @@ def run(args):
 
 
 def plot(args):
-    if args.cdf:
-        _plot_cdf(args)
-    elif args.scatter:
-        _plot_scatter(args)
-    elif args.histogram:
-        _plot_histogram(args)
+    plt.rcParams.update({'font.size': 48})
 
-
-def _plot_cdf(args):
-    df = pd.read_csv(
-        args.csvfile,
+    base_df = pd.read_csv(
+        str(args.reference_csv),
         header=None,
         names=[
             "pkg",
@@ -204,27 +192,10 @@ def _plot_cdf(args):
             "dep_len",
         ],
     )
-    print(df.head())
+    base_df["source"] = 0
 
-    cfg_ls = list(sorted(set(df["cfg"])))
-    pkg_ls = list(sorted(set(df["pkg"])))
-
-    fig, axs = plt.subplots(figsize=(6, 6), dpi=150)
-
-    for cfg in cfg_ls:
-        df_by_config = df[df["cfg"] == cfg]
-        times = df_by_config["total"]
-        times.hist(cumulative=True, density=1, bins=100, ax=axs, label=cfg, histtype="step")
-
-    axs.set_xlabel("Total Time [sec.]", fontsize=20)
-    axs.set_ylabel("Percentage of package", fontsize=20)
-    axs.legend(loc="upper left")
-    fig.savefig(args.output)
-
-
-def _plot_scatter(args):
-    df = pd.read_csv(
-        args.csvfile,
+    target_df = pd.read_csv(
+        str(args.candidate_csv),
         header=None,
         names=[
             "pkg",
@@ -238,74 +209,39 @@ def _plot_scatter(args):
             "dep_len",
         ],
     )
-    df_full = df
-    print(df_full.head())
+    target_df["source"] = 1
 
-    cfg_ls = list(sorted(set(df["cfg"])))
-    pkg_ls = list(sorted(set(df["pkg"])))
+    combined = pd.concat([base_df, target_df])
+    df = combined.groupby(["pkg", "source"])[["setup", "load", "ground", "solve", "total"]].describe()
 
-    timings = {}
-    deps = []
+    cols = ["setup", "load", "ground", "solve", "total"]
+    titles = [
+        "Setup", "Load", "Ground", "Solve", "Total"
+    ]
+    fig, axes = plt.subplots(1, 5, sharex=True, sharey=True, figsize=(160, 32), layout="constrained")
+    for ax, level, title in zip(axes, cols, titles):
+        current = df.unstack(level="source").loc[:, (level, "mean", 0):(level, "mean", 1)]
 
-    df_deps = df_full
+        negvals  = current.to_numpy().T - df.unstack(level="source").loc[:, (level, "min", 0):(level, "min", 1)].to_numpy().T
+        posvals  = df.unstack(level="source").loc[:, (level, "max", 0):(level, "max", 1)].to_numpy().T - current.to_numpy().T
 
-    fig, axs = plt.subplots(figsize=(6, 6), dpi=150)
+        yerr = np.stack((negvals, posvals), axis=1)
+        current.plot(
+            ax=ax,
+            kind="bar",
+            width=.9,
+            title=title,
+            grid=True,
+            yerr=yerr,
+            capsize=20,
+            error_kw={"capthick":4, "elinewidth": 2},
+            alpha=0.7
+        )
+        ax.set(xlabel=None, ylabel="Time [sec.]", ylim=[0, 51])
+        ax.legend(["develop", "PR"])
+        plt.setp(ax.get_xticklabels(), rotation=45, horizontalalignment='right')
 
-    df.plot.scatter(x="dep_len", y="total", ax=axs)
-    axs.set_xlabel("Number of possible dependencies", fontsize=20)
-    axs.set_ylabel("Total time [s]", fontsize=20)
-    fig.savefig(args.output)
-
-
-def _plot_histogram(args):
-    # Data analysis
-    df = pd.read_csv(
-        args.csvfile,
-        header=None,
-        names=[
-            "pkg",
-            "cfg",
-            "iter",
-            "setup",
-            "load",
-            "ground",
-            "solve",
-            "total",
-            "ndeps",
-        ],
-    )
-    print(df.head())
-
-    cfg_ls = list(sorted(set(df["cfg"])))
-    pkg_ls = list(sorted(set(df["pkg"])))
-    timings = {}
-    for cf in cfg_ls:
-        timings[cf] = {}
-        for ph in SOLUTION_PHASES:
-            timings[cf][ph] = []
-        for pk in pkg_ls:
-            tmp_df = df[df["pkg"] == pk]
-            tdf = tmp_df[tmp_df["cfg"] == cf]
-            for ph in SOLUTION_PHASES:
-                timings[cf][ph].append(tdf[ph].median())
-
-    for cf in cfg_ls:
-        fig, axs = plt.subplots(2, 2, sharey=True, tight_layout=True, figsize=(20, 20), dpi=100)
-        axes = list(axs.flatten())
-        n_bins = 150
-
-        fig.suptitle(cf, fontsize=24)
-        for i, ph in enumerate(SOLUTION_PHASES):
-            solve_times = sorted(zip(pkg_ls, timings[cf][ph]), key=lambda x: x[1], reverse=True)
-            tab_data = [[p, "{:.3f}".format(t)] for p, t in solve_times[0:5]]
-
-            axes[i].hist(sorted(timings[cf][ph], reverse=True), n_bins, label=ph)
-            axes[i].set_title(ph, fontsize=18)
-            tab = axes[i].table(cellText=tab_data, bbox=[0.1, -0.5, 0.75, 0.4])
-            tab.auto_set_font_size(False)
-            tab.auto_set_column_width(col=[0, 1])
-            tab.set_fontsize(12)
-    plt.savefig(args.output, dpi=150)
+    plt.savefig(args.output)
 
 
 def solve_benchmark(parser, args):
