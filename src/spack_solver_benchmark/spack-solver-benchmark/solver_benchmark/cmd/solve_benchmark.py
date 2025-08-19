@@ -270,7 +270,7 @@ def compare(args):
             kind="bar",
             width=0.9,
             title=title,
-            grid=True,
+            grid=False,
             yerr=error_bars,
             capsize=3 if col == "total" else 1,
             error_kw={"capthick": 1, "elinewidth": 0.5},
@@ -279,6 +279,7 @@ def compare(args):
 
         ax.set(xlabel=None, ylabel="Time [s]")
         ax.legend(["before", "after"])
+        ax.grid(True, axis="y")
         plt.setp(ax.get_xticklabels(), rotation=90)
 
     plt.savefig(args.output)
