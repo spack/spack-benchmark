@@ -18,3 +18,11 @@ $ spack solve-benchmark run -o radiuss.csv radiuss.txt
 
 The first command simply creates a text file where each line is an input to the concretization algorithm.
 The second command goes over all the inputs and records concretization time for each of them.
+
+## Comparing two benchmarks
+
+The following command compares two benchmark results in CSV format using a statistical test and generates a plot.
+
+```console
+$ spack solve-benchmark compare before.csv after.csv -o plot.png
+```
