@@ -7,7 +7,7 @@ import pathlib
 import random
 import sys
 import time
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -199,7 +199,7 @@ def run(args):
 def compare(args):
     """Compare two CSV files to see whether one is faster than the other and generate a plot."""
     before_df, after_df = _validate_and_load_csv_files(args.before, args.after)
-    significant_fields = []
+    significant: Dict[str, float] = {}
     before = before_df.groupby("spec")[TIMING_COLS].median()
     after = after_df.groupby("spec")[TIMING_COLS].median()
 
@@ -228,19 +228,11 @@ def compare(args):
         print()
 
         if is_significant:
-            significant_fields.append(
-                {
-                    "field": field,
-                    "p_value": p_value,
-                }
-            )
+            significant[field] = p_value
 
-    print(
-        "## Summary\n"
-        f"Statistically significant improvements ({len(significant_fields)} fields):"
-    )
-    for result in significant_fields:
-        print(f"* {result['field']}: p = {result['p_value']:.4f}")
+    print("## Summary\n" f"Statistically significant improvements ({len(significant)} fields):")
+    for field, p_value in significant.items():
+        print(f"* {field}: p = {p_value:.4f}")
 
     # Generate plot
     print(f"\n<!-- generating plot: {args.output} -->")
@@ -253,33 +245,41 @@ def compare(args):
     # Group by spec and source, calculate statistics
     df = combined.groupby(["spec", "source"])[TIMING_COLS].describe()
 
-    # Set up matplotlib configuration
-    plt.rcParams.update({"font.size": 48})
+    fig = plt.figure(figsize=(20, 10), layout="constrained")
+    setup_ax = plt.subplot2grid((2, 3), (1, 0), fig=fig)
+    axes = {
+        "total": plt.subplot2grid((2, 3), (0, 0), colspan=3, fig=fig),
+        "setup": setup_ax,
+        "ground": plt.subplot2grid((2, 3), (1, 1), fig=fig, sharey=setup_ax),
+        "solve": plt.subplot2grid((2, 3), (1, 2), fig=fig, sharey=setup_ax),
+    }
 
-    # Create subplots
-    _, axes = plt.subplots(1, 5, sharex=True, sharey=True, figsize=(160, 32), layout="constrained")
-
-    for ax, col in zip(axes, TIMING_COLS):
+    for col, ax in axes.items():
         col_stats = df.xs(col, level=0, axis=1)
         medians = col_stats["50%"].unstack(level="source")
         mins = col_stats["min"].unstack(level="source")
         maxs = col_stats["max"].unstack(level="source")
         error_bars = np.stack(((medians - mins).T, (maxs - medians).T), axis=1)
+        if col in significant:
+            title = f"**{col.capitalize()} (significant)**"
+        else:
+            title = f"{col.capitalize()} (not significant)"
+
         medians.plot(
             ax=ax,
             kind="bar",
             width=0.9,
-            title=col.capitalize(),
+            title=title,
             grid=True,
             yerr=error_bars,
-            capsize=20,
-            error_kw={"capthick": 4, "elinewidth": 2},
+            capsize=5,
+            error_kw={"capthick": 1, "elinewidth": 0.5},
             alpha=0.7,
         )
 
-        ax.set(xlabel=None, ylabel="Time [sec.]")
+        ax.set(xlabel=None, ylabel="Time [s]")
         ax.legend(["before", "after"])
-        plt.setp(ax.get_xticklabels(), rotation=45, horizontalalignment="right")
+        plt.setp(ax.get_xticklabels(), rotation=70, horizontalalignment="right")
 
     plt.savefig(args.output)
 
