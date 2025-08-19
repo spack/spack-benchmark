@@ -143,6 +143,9 @@ def _validate_and_load_csv_files(
 
 def run(args):
     """run benchmarks and produce a CSV file of timing results"""
+    # Solver performance depends on the order of facts. Randomization per spec ensures that the
+    # median time is a more reliable measure for comparison of benchmarks.
+    os.environ["SPACK_SOLVER_RANDOMIZATION"] = "1"
     input_file = pathlib.Path(args.specfile)
     if not input_file.exists():
         current_dir = pathlib.Path(__file__).parent
