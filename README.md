@@ -4,7 +4,7 @@
 $ unset SPACK_PYTHON  # ensure Spack uses the Python from the virtual environment
 $ python3 -m venv .venv
 $ source .venv/bin/activate
-$ pip install "git+https://github.com/alalazo/spack-benchmark#egg=spack_solver_benchmark"
+$ pip install "git+https://github.com/spack/spack-benchmark#egg=spack_solver_benchmark"
 ```
 
 ## Usage
