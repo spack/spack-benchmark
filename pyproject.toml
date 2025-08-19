@@ -17,5 +17,8 @@ spack_solver_benchmark = "spack_solver_benchmark:get_spack_config_dir"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+spack_solver_benchmark = ["spack-solver-benchmark/solver_benchmark/cmd/data/*.txt"]
+
 [tool.black]
 line-length = 99

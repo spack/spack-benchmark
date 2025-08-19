@@ -13,7 +13,7 @@ To benchmark concretization speed, and record results in a CSV file:
 
 ```console
 $ spack list -t radiuss > radiuss.txt
-$ spack solve-benchmark run -o radiuss.csv radiuss.txt
+$ spack solve-benchmark run --fresh --repetitions 5 --nprocess 4 -o radiuss.csv radiuss.txt
 ```
 
 The first command simply creates a text file where each line is an input to the concretization algorithm.
