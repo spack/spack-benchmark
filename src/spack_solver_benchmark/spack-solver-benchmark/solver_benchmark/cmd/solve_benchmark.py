@@ -76,6 +76,11 @@ def setup_parser(subparser: argparse.ArgumentParser):
         help="output plot file (default: comparison.png)",
         default="comparison.png",
     )
+    compare_parser.add_argument(
+        "--no-share-y",
+        help="do not share y-axis between phase plots",
+        action="store_true",
+    )
 
 
 Record = Tuple[str, int, float, float, float, float, float, int]
@@ -247,11 +252,13 @@ def compare(args):
 
     fig = plt.figure(figsize=(20, 10), layout="constrained")
     setup_ax = plt.subplot2grid((2, 3), (1, 0), fig=fig)
+    sharey = None if args.no_share_y else setup_ax
+
     axes = {
         "total": plt.subplot2grid((2, 3), (0, 0), colspan=3, fig=fig),
         "setup": setup_ax,
-        "ground": plt.subplot2grid((2, 3), (1, 1), fig=fig, sharey=setup_ax),
-        "solve": plt.subplot2grid((2, 3), (1, 2), fig=fig, sharey=setup_ax),
+        "ground": plt.subplot2grid((2, 3), (1, 1), fig=fig, sharey=sharey),
+        "solve": plt.subplot2grid((2, 3), (1, 2), fig=fig, sharey=sharey),
     }
 
     for col, ax in axes.items():
@@ -270,7 +277,6 @@ def compare(args):
             kind="bar",
             width=0.9,
             title=title,
-            grid=False,
             yerr=error_bars,
             capsize=3 if col == "total" else 1,
             error_kw={"capthick": 1, "elinewidth": 0.5},
