@@ -51,9 +51,8 @@ def setup_parser(subparser: argparse.ArgumentParser):
         type=int,
     )
     run_parser.add_argument(
-        "-s",
-        "--shuffle",
-        help="shuffle the list of concretizations to be done",
+        "--no-shuffle",
+        help="do not shuffle the input specs before running the benchmark",
         action="store_true",
     )
     add_concretizer_args(run_parser)
@@ -165,7 +164,7 @@ def run(args):
         for i in range(args.repetitions)
     ]
 
-    if args.shuffle:
+    if not args.no_shuffle:
         random.shuffle(input_list)
 
     start = time.time()
