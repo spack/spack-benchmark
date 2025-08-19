@@ -245,9 +245,7 @@ def compare(args):
     # Group by spec and source, calculate statistics
     df = combined.groupby(["spec", "source"])[TIMING_COLS].describe()
 
-    # Set up matplotlib configuration
-    plt.rcParams.update({"font.size": 48})
-    fig = plt.figure(figsize=(80, 40), layout="constrained")
+    fig = plt.figure(figsize=(20, 10), layout="constrained")
     setup_ax = plt.subplot2grid((2, 3), (1, 0), fig=fig)
     axes = {
         "total": plt.subplot2grid((2, 3), (0, 0), colspan=3, fig=fig),
@@ -274,12 +272,12 @@ def compare(args):
             title=title,
             grid=True,
             yerr=error_bars,
-            capsize=20,
-            error_kw={"capthick": 4, "elinewidth": 2},
+            capsize=5,
+            error_kw={"capthick": 1, "elinewidth": 0.5},
             alpha=0.7,
         )
 
-        ax.set(xlabel=None, ylabel="Time [sec.]")
+        ax.set(xlabel=None, ylabel="Time [s]")
         ax.legend(["before", "after"])
         plt.setp(ax.get_xticklabels(), rotation=70, horizontalalignment="right")
 
