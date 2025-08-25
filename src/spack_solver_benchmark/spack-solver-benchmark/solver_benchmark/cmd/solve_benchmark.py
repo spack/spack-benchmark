@@ -24,6 +24,7 @@ from spack.llnl.util import tty
 SOLUTION_PHASES = "setup", "load", "ground", "solve"
 TIMING_COLS = [*SOLUTION_PHASES, "total"]
 COLUMNS = ["spec", "iteration", *TIMING_COLS, "deps"]
+ALPHA = 0.05
 
 
 level = "long"
@@ -201,10 +202,10 @@ def run(args):
     pd.DataFrame(pkg_stats, columns=COLUMNS).to_csv(args.output, index=False)
 
 
-def compare(args):
+def compare(args) -> None:
     """Compare two CSV files to see whether one is faster than the other and generate a plot."""
     before_df, after_df = _validate_and_load_csv_files(args.before, args.after)
-    significant: Dict[str, float] = {}
+    significant: Dict[str, Tuple[str, float]] = {}
     before = before_df.groupby("spec")[TIMING_COLS].median()
     after = after_df.groupby("spec")[TIMING_COLS].median()
 
@@ -220,24 +221,29 @@ def compare(args):
         # Null hypothesis: median of log of ratios is 0 (i.e., median of ratios is 1, no change)
         # alternative="less" tests if things got faster (ratios < 1, log of ratios < 0)
         log_ratios = np.log(comparison["ratio"].to_numpy())
-        test_result = wilcoxon(log_ratios, alternative="less")
-        alpha = 0.05
-        p_value: float = test_result.pvalue
-        is_significant = p_value < alpha
+
+        test_improvement = wilcoxon(log_ratios, alternative="less")
+        test_regression = wilcoxon(log_ratios, alternative="greater")
+
+        if test_improvement.pvalue < ALPHA:
+            result = "improvement"
+            significant[field] = (result, test_improvement.pvalue)
+        elif test_regression.pvalue < ALPHA:
+            result = "regression"
+            significant[field] = (result, test_regression.pvalue)
+        else:
+            result = "not significant"
 
         print(
-            f"**{field}**: {'significant' if is_significant else 'not significant'} "
-            f"({p_value:.4f} {'<' if is_significant else '>='} {alpha})\n"
+            f"**{field}**: {result} (p_improvement = {test_improvement.pvalue:.4f}, "
+            f"p_regression = {test_regression.pvalue:.4f})"
         )
         print(comparison.round(2).to_markdown())
         print()
 
-        if is_significant:
-            significant[field] = p_value
-
-    print("## Summary\n" f"Statistically significant improvements ({len(significant)} fields):")
-    for field, p_value in significant.items():
-        print(f"* {field}: p = {p_value:.4f}")
+    print("## Summary\n" f"Statistically significant ({len(significant)} fields):")
+    for field, (result, p_value) in significant.items():
+        print(f"* {field}: {result} (p = {p_value:.4f})")
 
     # Generate plot
     print(f"\n<!-- generating plot: {args.output} -->")
@@ -267,8 +273,9 @@ def compare(args):
         mins = col_stats["min"].unstack(level="source")
         maxs = col_stats["max"].unstack(level="source")
         error_bars = np.stack(((medians - mins).T, (maxs - medians).T), axis=1)
-        if col in significant:
-            title = f"**{col.capitalize()} (significant)**"
+        details = significant.get(col, None)
+        if details is not None:
+            title = f"**{col.capitalize()} ({details[0]})**"
         else:
             title = f"{col.capitalize()} (not significant)"
 
