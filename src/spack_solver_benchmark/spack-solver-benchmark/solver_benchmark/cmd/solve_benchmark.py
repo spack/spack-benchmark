@@ -56,6 +56,12 @@ def setup_parser(subparser: argparse.ArgumentParser):
         help="do not shuffle the input specs before running the benchmark",
         action="store_true",
     )
+    run_parser.add_argument(
+        "--clear-repo-modules",
+        help="clear spack_repo.* modules from sys.modules before each solve to include package "
+        "load time",
+        action="store_true",
+    )
     add_concretizer_args(run_parser)
     run_parser.add_argument(
         "specfile",
@@ -87,10 +93,19 @@ def setup_parser(subparser: argparse.ArgumentParser):
 Record = Tuple[str, int, float, float, float, float, float, int]
 
 
+def _clear_repo_modules():
+    """Clear all spack_repo.* modules from sys.modules to force reimport."""
+    to_delete = [name for name in sys.modules if name.startswith("spack_repo.")]
+    for name in to_delete:
+        del sys.modules[name]
+
+
 def _run_single_solve(
-    inputs: Tuple[List[spack.spec.Spec], int],
+    inputs: Tuple[List[spack.spec.Spec], int, bool],
 ) -> Record:
-    specs, i = inputs
+    specs, i, clear_repo_modules = inputs
+    if clear_repo_modules:
+        _clear_repo_modules()
     solver = asp.Solver()
     result, timer, _ = solver.driver.solve(
         asp.SpackSolverSetup(),
@@ -165,7 +180,7 @@ def run(args):
     _warmup()
 
     input_list = [
-        (spack.cmd.parse_specs(spec_str), i)
+        (spack.cmd.parse_specs(spec_str), i, args.clear_repo_modules)
         for spec_str in spec_strs
         for i in range(args.repetitions)
     ]
