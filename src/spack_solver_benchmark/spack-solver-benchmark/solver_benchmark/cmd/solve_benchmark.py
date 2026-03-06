@@ -23,7 +23,7 @@ from spack.llnl.util import tty
 
 SOLUTION_PHASES = "setup", "load", "ground", "solve"
 TIMING_COLS = [*SOLUTION_PHASES, "total"]
-COLUMNS = ["spec", "iteration", *TIMING_COLS, "deps"]
+COLUMNS = ["spec", "hash", "iteration", *TIMING_COLS, "deps"]
 ALPHA = 0.05
 
 
@@ -90,7 +90,7 @@ def setup_parser(subparser: argparse.ArgumentParser):
     )
 
 
-Record = Tuple[str, int, float, float, float, float, float, int]
+Record = Tuple[str, str, int, float, float, float, float, float, int]
 
 
 def _clear_repo_modules():
@@ -114,8 +114,10 @@ def _run_single_solve(
     )
     assert isinstance(timer, spack.util.timer.Timer)
     timer.stop()
+    spec_hash = result.specs[0].dag_hash() if result.specs else ""
     return (
         str(specs[0]),
+        spec_hash,
         i,
         timer.duration("setup"),
         timer.duration("load"),
@@ -207,7 +209,7 @@ def run(args):
 
     for idx, record in enumerate(record_iterator):
         pkg_stats.append(record)
-        tty.msg(f"{record[6]:6.1f}s [{(idx + 1)/len(input_list)*100:3.0f}%] {record[0]}")
+        tty.msg(f"{record[7]:6.1f}s [{(idx + 1)/len(input_list)*100:3.0f}%] {record[0]}")
         sys.stdout.flush()
 
     finish = time.time()
@@ -217,9 +219,52 @@ def run(args):
     pd.DataFrame(pkg_stats, columns=COLUMNS).to_csv(args.output, index=False)
 
 
+def _collect_hash_warnings(
+    before_df: pd.DataFrame, after_df: pd.DataFrame, before_file: str, after_file: str
+) -> List[str]:
+    warnings = []
+
+    # Warning 1: same spec has multiple distinct hashes within the same file
+    for df, name in [(before_df, before_file), (after_df, after_file)]:
+        for spec, group in df.groupby("spec"):
+            hashes = group["hash"].unique()
+            if len(hashes) > 1:
+                hashes_str = ", ".join(f"`{h}`" for h in sorted(hashes))
+                warnings.append(
+                    f"`{spec}` has multiple hashes in `{name}` (multiple optimal solutions): "
+                    f"{hashes_str}"
+                )
+
+    # Warning 2: same spec has a different hash set between the two files
+    before_hashes = before_df.groupby("spec")["hash"].apply(set)
+    after_hashes = after_df.groupby("spec")["hash"].apply(set)
+    for spec in before_hashes.index:
+        before_set = before_hashes[spec]
+        after_set = after_hashes[spec]
+        if before_set.isdisjoint(after_set):
+            before_str = ", ".join(f"`{h}`" for h in sorted(before_set))
+            after_str = ", ".join(f"`{h}`" for h in sorted(after_set))
+            warnings.append(
+                f"`{spec}` hash changed between files: "
+                f"`{before_file}` has {{{before_str}}}, `{after_file}` has {{{after_str}}}"
+            )
+
+    return warnings
+
+
 def compare(args) -> None:
     """Compare two CSV files to see whether one is faster than the other and generate a plot."""
     before_df, after_df = _validate_and_load_csv_files(args.before, args.after)
+
+    print("## Warnings\n")
+    warnings = _collect_hash_warnings(before_df, after_df, args.before, args.after)
+    if warnings:
+        for w in warnings:
+            print(f"* {w}")
+    else:
+        print("No warnings.")
+    print()
+
     significant: Dict[str, Tuple[str, float]] = {}
     before = before_df.groupby("spec")[TIMING_COLS].median()
     after = after_df.groupby("spec")[TIMING_COLS].median()
