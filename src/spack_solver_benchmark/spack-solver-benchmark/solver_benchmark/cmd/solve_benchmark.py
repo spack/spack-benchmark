@@ -23,7 +23,7 @@ from spack.llnl.util import tty
 
 SOLUTION_PHASES = "setup", "load", "ground", "solve"
 TIMING_COLS = [*SOLUTION_PHASES, "total"]
-COLUMNS = ["spec", "iteration", *TIMING_COLS, "deps"]
+COLUMNS = ["spec", "hash", "iteration", *TIMING_COLS, "deps"]
 ALPHA = 0.05
 
 
@@ -90,7 +90,7 @@ def setup_parser(subparser: argparse.ArgumentParser):
     )
 
 
-Record = Tuple[str, int, float, float, float, float, float, int]
+Record = Tuple[str, str, int, float, float, float, float, float, int]
 
 
 def _clear_repo_modules():
@@ -114,8 +114,10 @@ def _run_single_solve(
     )
     assert isinstance(timer, spack.util.timer.Timer)
     timer.stop()
+    spec_hash = result.specs[0].dag_hash() if result.specs else ""
     return (
         str(specs[0]),
+        spec_hash,
         i,
         timer.duration("setup"),
         timer.duration("load"),
@@ -207,7 +209,7 @@ def run(args):
 
     for idx, record in enumerate(record_iterator):
         pkg_stats.append(record)
-        tty.msg(f"{record[6]:6.1f}s [{(idx + 1)/len(input_list)*100:3.0f}%] {record[0]}")
+        tty.msg(f"{record[7]:6.1f}s [{(idx + 1)/len(input_list)*100:3.0f}%] {record[0]}")
         sys.stdout.flush()
 
     finish = time.time()
