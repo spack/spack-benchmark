@@ -219,9 +219,52 @@ def run(args):
     pd.DataFrame(pkg_stats, columns=COLUMNS).to_csv(args.output, index=False)
 
 
+def _collect_hash_warnings(
+    before_df: pd.DataFrame, after_df: pd.DataFrame, before_file: str, after_file: str
+) -> List[str]:
+    warnings = []
+
+    # Warning 1: same spec has multiple distinct hashes within the same file
+    for df, name in [(before_df, before_file), (after_df, after_file)]:
+        for spec, group in df.groupby("spec"):
+            hashes = group["hash"].unique()
+            if len(hashes) > 1:
+                hashes_str = ", ".join(f"`{h}`" for h in sorted(hashes))
+                warnings.append(
+                    f"`{spec}` has multiple hashes in `{name}` (multiple optimal solutions): "
+                    f"{hashes_str}"
+                )
+
+    # Warning 2: same spec has a different hash set between the two files
+    before_hashes = before_df.groupby("spec")["hash"].apply(set)
+    after_hashes = after_df.groupby("spec")["hash"].apply(set)
+    for spec in before_hashes.index:
+        before_set = before_hashes[spec]
+        after_set = after_hashes[spec]
+        if before_set.isdisjoint(after_set):
+            before_str = ", ".join(f"`{h}`" for h in sorted(before_set))
+            after_str = ", ".join(f"`{h}`" for h in sorted(after_set))
+            warnings.append(
+                f"`{spec}` hash changed between files: "
+                f"`{before_file}` has {{{before_str}}}, `{after_file}` has {{{after_str}}}"
+            )
+
+    return warnings
+
+
 def compare(args) -> None:
     """Compare two CSV files to see whether one is faster than the other and generate a plot."""
     before_df, after_df = _validate_and_load_csv_files(args.before, args.after)
+
+    print("## Warnings\n")
+    warnings = _collect_hash_warnings(before_df, after_df, args.before, args.after)
+    if warnings:
+        for w in warnings:
+            print(f"* {w}")
+    else:
+        print("No warnings.")
+    print()
+
     significant: Dict[str, Tuple[str, float]] = {}
     before = before_df.groupby("spec")[TIMING_COLS].median()
     after = after_df.groupby("spec")[TIMING_COLS].median()
