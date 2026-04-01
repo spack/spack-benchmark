@@ -3,7 +3,7 @@ name = "spack_solver_benchmark"
 description = "Extension commands to benchmark Spack"
 version = "0.1.0"
 requires-python = ">=3.8"
-dependencies = ["scipy", "tabulate", "pandas", "matplotlib"]
+dependencies = ["scipy", "tabulate", "pandas", "matplotlib", "pytest-benchmark"]
 
 [project.optional-dependencies]
 dev = ["black"]
@@ -18,7 +18,10 @@ spack_solver_benchmark = "spack_solver_benchmark:get_spack_config_dir"
 where = ["src"]
 
 [tool.setuptools.package-data]
-spack_solver_benchmark = ["spack-solver-benchmark/solver_benchmark/cmd/data/*.txt"]
+spack_solver_benchmark = [
+    "spack-solver-benchmark/solver_benchmark/cmd/data/*.txt",
+    "spack-solver-benchmark/solver_benchmark/benchmarks/*.py",
+]
 
 [tool.black]
 line-length = 99
