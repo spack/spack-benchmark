@@ -19,7 +19,7 @@ import spack.util.parallel
 import spack.util.timer
 from scipy.stats import wilcoxon
 from spack.cmd.common.arguments import add_concretizer_args
-from spack.llnl.util import tty
+from spack.util import tty
 
 SOLUTION_PHASES = "setup", "load", "ground", "solve"
 TIMING_COLS = [*SOLUTION_PHASES, "total"]
