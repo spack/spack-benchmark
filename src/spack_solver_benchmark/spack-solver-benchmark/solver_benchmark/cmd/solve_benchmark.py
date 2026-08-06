@@ -14,12 +14,17 @@ import numpy as np
 import pandas as pd
 import spack.cmd
 import spack.solver.asp as asp
-import spack.spec
 import spack.util.parallel
-import spack.util.timer
 from scipy.stats import wilcoxon
 from spack.cmd.common.arguments import add_concretizer_args
 from spack.util import tty
+# The worker function lives in the importable ``spack_solver_benchmark`` package, not here:
+# multiprocessing pickles the pool target by reference, and under the ``forkserver`` start
+# method (the default on Python 3.14+) workers re-import it by name. This command module is
+# loaded by Spack under a synthetic ``spack.extensions.*`` name that a fresh worker cannot
+# import, so the target must live elsewhere.
+from spack_solver_benchmark.worker import Record, run_single_solve
+
 
 SOLUTION_PHASES = "setup", "load", "ground", "solve"
 TIMING_COLS = [*SOLUTION_PHASES, "total"]
@@ -90,44 +95,6 @@ def setup_parser(subparser: argparse.ArgumentParser):
     )
 
 
-Record = Tuple[str, str, int, float, float, float, float, float, int]
-
-
-def _clear_repo_modules():
-    """Clear all spack_repo.* modules from sys.modules to force reimport."""
-    to_delete = [name for name in sys.modules if name.startswith("spack_repo.")]
-    for name in to_delete:
-        del sys.modules[name]
-
-
-def _run_single_solve(
-    inputs: Tuple[List[spack.spec.Spec], int, bool],
-) -> Record:
-    specs, i, clear_repo_modules = inputs
-    if clear_repo_modules:
-        _clear_repo_modules()
-    solver = asp.Solver()
-    result, timer, _ = solver.driver.solve(
-        asp.SpackSolverSetup(),
-        specs,
-        reuse=solver.selector.reusable_specs(specs),
-    )
-    assert isinstance(timer, spack.util.timer.Timer)
-    timer.stop()
-    spec_hash = result.specs[0].dag_hash() if result.specs else ""
-    return (
-        str(specs[0]),
-        spec_hash,
-        i,
-        timer.duration("setup"),
-        timer.duration("load"),
-        timer.duration("ground"),
-        timer.duration("solve"),
-        timer.duration(),
-        len(result.possible_dependencies),
-    )
-
-
 def _warmup():
     specs = spack.cmd.parse_specs("hdf5")
     solver = asp.Solver()
@@ -195,14 +162,14 @@ def run(args):
 
     if args.nprocess > 1:
         record_iterator = spack.util.parallel.imap_unordered(
-            _run_single_solve,
+            run_single_solve,
             input_list,
             processes=args.nprocess,
             debug=tty.is_debug(),
             maxtaskperchild=1,
         )
     else:
-        record_iterator = map(_run_single_solve, input_list)
+        record_iterator = map(run_single_solve, input_list)
 
     # Process records with unified progress reporting
     tty.info("Benchmarking...")
